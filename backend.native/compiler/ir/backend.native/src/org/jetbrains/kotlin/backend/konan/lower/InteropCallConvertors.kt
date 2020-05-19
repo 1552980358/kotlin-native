@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.backend.konan.cgen.isCEnumType
 import org.jetbrains.kotlin.backend.konan.cgen.isVector
 import org.jetbrains.kotlin.backend.konan.descriptors.getAnnotationStringValue
 import org.jetbrains.kotlin.backend.konan.ir.KonanSymbols
+import org.jetbrains.kotlin.backend.konan.ir.isObjCObjectType
 import org.jetbrains.kotlin.backend.konan.ir.superClasses
 import org.jetbrains.kotlin.backend.konan.llvm.IntrinsicType
 import org.jetbrains.kotlin.ir.builders.*
@@ -56,6 +57,14 @@ private class InteropCallContext(
 
     fun IrType.isStoredInMemoryDirectly(): Boolean =
             isPrimitiveType() || isUnsigned() || isVector()
+
+    fun IrType.isSupportedReference(): Boolean = isObjCObjectType()
+            || isNullableString()
+            || classOrNull == symbols.list
+            || classOrNull == symbols.mutableList
+            || classOrNull == symbols.set
+            || classOrNull == symbols.map
+            || isFunction()
 }
 
 private inline fun <T> generateInteropCall(
@@ -215,6 +224,17 @@ private fun InteropCallContext.writePointerToMemory(
     return writeValueToMemory(nativePtr, valueToWrite, valueToWrite.type)
 }
 
+private fun InteropCallContext.writeObjCReferenceToMemory(
+        nativePtr: IrExpression,
+        value: IrExpression,
+        pointerType: IrType
+): IrExpression {
+    val valueToWrite = builder.irCall(symbols.interopObjCObjectRawValueGetter).also {
+        it.extensionReceiver = value
+    }
+    return writeValueToMemory(nativePtr, valueToWrite, valueToWrite.type)
+}
+
 private fun InteropCallContext.calculateFieldPointer(receiver: IrExpression, offset: Long): IrExpression {
     val base = builder.irCall(symbols.interopNativePointedRawPtrGetter).also {
         it.dispatchReceiver = receiver
@@ -239,6 +259,16 @@ private fun InteropCallContext.readPointerFromMemory(nativePtr: IrExpression): I
 private fun InteropCallContext.readPointed(nativePtr: IrExpression): IrExpression {
     return builder.irCall(symbols.interopInterpretNullablePointed).also {
         it.putValueArgument(0, nativePtr)
+    }
+}
+
+private fun InteropCallContext.readObjectiveCReferenceFromMemory(
+        nativePtr: IrExpression,
+        type: IrType
+): IrExpression {
+    val readMemory = readValueFromMemory(nativePtr, symbols.nativePtrType)
+    return builder.irCall(symbols.interopInterpretObjCPointerOrNull, listOf(type)).apply {
+        putValueArgument(0, readMemory)
     }
 }
 
@@ -291,7 +321,8 @@ private fun InteropCallContext.generateMemberAtAccess(callSite: IrCall): IrExpre
                 type.isStoredInMemoryDirectly() -> readValueFromMemory(fieldPointer, type)
                 type.isCPointer() -> readPointerFromMemory(fieldPointer)
                 type.isNativePointed() -> readPointed(fieldPointer)
-                else -> error("Cannot get field type: ${type.getClass()?.name}")
+                type.isSupportedReference() -> readObjectiveCReferenceFromMemory(fieldPointer, type)
+                else -> error("Cannot get struct field of type: ${type.getClass()?.name}")
             }
         }
         accessor.isSetter -> {
@@ -301,7 +332,8 @@ private fun InteropCallContext.generateMemberAtAccess(callSite: IrCall): IrExpre
                 type.isCEnumType() -> writeEnumValueToMemory(fieldPointer, value, type)
                 type.isStoredInMemoryDirectly() -> writeValueToMemory(fieldPointer, value, type)
                 type.isCPointer() -> writePointerToMemory(fieldPointer, value, type)
-                else -> error("Cannot set field of type ${type.getClass()?.name}")
+                type.isSupportedReference() -> writeObjCReferenceToMemory(fieldPointer, value, type)
+                else -> error("Cannot set struct field of type: ${type.getClass()?.name}")
             }
         }
         else -> error("")
