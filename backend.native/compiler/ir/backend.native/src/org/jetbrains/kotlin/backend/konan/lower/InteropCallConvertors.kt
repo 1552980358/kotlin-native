@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.backend.konan.cgen.isCEnumType
 import org.jetbrains.kotlin.backend.konan.cgen.isVector
 import org.jetbrains.kotlin.backend.konan.descriptors.getAnnotationStringValue
 import org.jetbrains.kotlin.backend.konan.ir.KonanSymbols
+import org.jetbrains.kotlin.backend.konan.ir.isAny
 import org.jetbrains.kotlin.backend.konan.ir.isObjCObjectType
 import org.jetbrains.kotlin.backend.konan.ir.superClasses
 import org.jetbrains.kotlin.backend.konan.llvm.IntrinsicType
@@ -59,7 +60,8 @@ private class InteropCallContext(
             isPrimitiveType() || isUnsigned() || isVector()
 
     fun IrType.isSupportedReference(): Boolean = isObjCObjectType()
-            || isNullableString()
+            || getClass()?.isAny() == true
+            || isStringClassType()
             || classOrNull == symbols.list
             || classOrNull == symbols.mutableList
             || classOrNull == symbols.set
