@@ -26,11 +26,6 @@ fun testStructWithNSObject() {
         struct.`object` = null
         assertEquals(null, struct.`object`)
 
-        struct.block = { 3 }
-        assertEquals(3, struct.block!!())
-        struct.block = null
-        assertEquals(null, struct.block)
-
         struct.array = null
         assertEquals(null, struct.array)
         struct.array = listOf(1, 2, 3)
@@ -54,9 +49,9 @@ fun testStructWithNSObject() {
 
         // Check that subtyping via Nothing-returning functions does not break compiler.
         assertFailsWith<NotImplementedError> {
+            struct.any = TODO()
             struct.nsString = TODO()
             struct.`object` = TODO()
-            struct.block = TODO()
             struct.array = TODO()
             struct.set = TODO()
             struct.dictionary = TODO()
