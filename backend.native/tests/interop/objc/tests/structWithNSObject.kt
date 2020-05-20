@@ -11,6 +11,11 @@ fun testStructWithNSObject() {
     memScoped {
         val struct = alloc<CStructWithNSObjects>()
 
+        struct.any = 5
+        assertEquals(5, struct.any)
+        struct.any = null
+        assertEquals(null, struct.any)
+
         struct.nsString = "hello"
         assertEquals("hello", struct.nsString)
         struct.nsString = null
